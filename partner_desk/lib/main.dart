@@ -1,151 +1,252 @@
-// The original content is temporarily commented out to allow generating a self-contained demo - feel free to uncomment later.
-
-// import 'package:flutter/material.dart';
-//
-// void main() {
-//   runApp(const MyApp());
-// }
-//
-// class MyApp extends StatelessWidget {
-//   const MyApp({super.key});
-//
-//   // This widget is the root of your application.
-//   @override
-//   Widget build(BuildContext context) {
-//     return MaterialApp(
-//       title: 'Flutter Demo',
-//       theme: ThemeData(
-//         // This is the theme of your application.
-//         //
-//         // TRY THIS: Try running your application with "flutter run". You'll see
-//         // the application has a purple toolbar. Then, without quitting the app,
-//         // try changing the seedColor in the colorScheme below to Colors.green
-//         // and then invoke "hot reload" (save your changes or press the "hot
-//         // reload" button in a Flutter-supported IDE, or press "r" if you used
-//         // the command line to start the app).
-//         //
-//         // Notice that the counter didn't reset back to zero; the application
-//         // state is not lost during the reload. To reset the state, use hot
-//         // restart instead.
-//         //
-//         // This works for code too, not just values: Most code changes can be
-//         // tested with just a hot reload.
-//         colorScheme: .fromSeed(seedColor: Colors.deepPurple),
-//       ),
-//       home: const MyHomePage(title: 'Flutter Demo Home Page'),
-//     );
-//   }
-// }
-//
-// class MyHomePage extends StatefulWidget {
-//   const MyHomePage({super.key, required this.title});
-//
-//   // This widget is the home page of your application. It is stateful, meaning
-//   // that it has a State object (defined below) that contains fields that affect
-//   // how it looks.
-//
-//   // This class is the configuration for the state. It holds the values (in this
-//   // case the title) provided by the parent (in this case the App widget) and
-//   // used by the build method of the State. Fields in a Widget subclass are
-//   // always marked "final".
-//
-//   final String title;
-//
-//   @override
-//   State<MyHomePage> createState() => _MyHomePageState();
-// }
-//
-// class _MyHomePageState extends State<MyHomePage> {
-//   int _counter = 0;
-//
-//   void _incrementCounter() {
-//     setState(() {
-//       // This call to setState tells the Flutter framework that something has
-//       // changed in this State, which causes it to rerun the build method below
-//       // so that the display can reflect the updated values. If we changed
-//       // _counter without calling setState(), then the build method would not be
-//       // called again, and so nothing would appear to happen.
-//       _counter++;
-//     });
-//   }
-//
-//   @override
-//   Widget build(BuildContext context) {
-//     // This method is rerun every time setState is called, for instance as done
-//     // by the _incrementCounter method above.
-//     //
-//     // The Flutter framework has been optimized to make rerunning build methods
-//     // fast, so that you can just rebuild anything that needs updating rather
-//     // than having to individually change instances of widgets.
-//     return Scaffold(
-//       appBar: AppBar(
-//         // TRY THIS: Try changing the color here to a specific color (to
-//         // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-//         // change color while the other colors stay the same.
-//         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-//         // Here we take the value from the MyHomePage object that was created by
-//         // the App.build method, and use it to set our appbar title.
-//         title: Text(widget.title),
-//       ),
-//       body: Center(
-//         // Center is a layout widget. It takes a single child and positions it
-//         // in the middle of the parent.
-//         child: Column(
-//           // Column is also a layout widget. It takes a list of children and
-//           // arranges them vertically. By default, it sizes itself to fit its
-//           // children horizontally, and tries to be as tall as its parent.
-//           //
-//           // Column has various properties to control how it sizes itself and
-//           // how it positions its children. Here we use mainAxisAlignment to
-//           // center the children vertically; the main axis here is the vertical
-//           // axis because Columns are vertical (the cross axis would be
-//           // horizontal).
-//           //
-//           // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-//           // action in the IDE, or press "p" in the console), to see the
-//           // wireframe for each widget.
-//           mainAxisAlignment: .center,
-//           children: [
-//             const Text('You have pushed the button this many times:'),
-//             Text(
-//               '$_counter',
-//               style: Theme.of(context).textTheme.headlineMedium,
-//             ),
-//           ],
-//         ),
-//       ),
-//       floatingActionButton: FloatingActionButton(
-//         onPressed: _incrementCounter,
-//         tooltip: 'Increment',
-//         child: const Icon(Icons.add),
-//       ),
-//     );
-//   }
-// }
-//
-
+import 'dart:async';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
-import 'package:partner_desk/src/rust/api/simple.dart';
+import 'package:partner_desk/src/rust/api/remote.dart';
 import 'package:partner_desk/src/rust/frb_generated.dart';
 
 Future<void> main() async {
   await RustLib.init();
-  runApp(const MyApp());
+  runApp(const PartnerDeskApp());
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class PartnerDeskApp extends StatelessWidget {
+  const PartnerDeskApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      home: Scaffold(
-        appBar: AppBar(title: const Text('flutter_rust_bridge quickstart')),
-        body: Center(
-          child: Text(
-            'Action: Call Rust `greet("Tom")`\nResult: `${greet(name: "Tom")}`',
+      title: 'PartnerDesk',
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF1E88E5),
+          brightness: Brightness.dark,
+        ),
+        useMaterial3: true,
+      ),
+      home: const HomeScreen(),
+    );
+  }
+}
+
+class HomeScreen extends StatefulWidget {
+  const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  final TextEditingController _ipController = TextEditingController(text: '127.0.0.1');
+  bool _isHosting = false;
+
+  void _toggleHost() async {
+    if (_isHosting) {
+      stopHost();
+      setState(() => _isHosting = false);
+    } else {
+      setState(() => _isHosting = true);
+      try {
+        await startHost(port: 9090);
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Host error: $e')));
+          setState(() => _isHosting = false);
+        }
+      }
+    }
+  }
+
+  void _connect() {
+    final ip = _ipController.text;
+    if (ip.isNotEmpty) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => ViewerScreen(ip: ip, port: 9090)),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('PartnerDesk', style: TextStyle(fontWeight: FontWeight.bold)),
+        centerTitle: true,
+      ),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32.0),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 400),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Card(
+                  elevation: 4,
+                  child: Padding(
+                    padding: const EdgeInsets.all(24.0),
+                    child: Column(
+                      children: [
+                        const Icon(Icons.screen_share, size: 64, color: Colors.blue),
+                        const SizedBox(height: 16),
+                        const Text('Share Your Screen', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 16),
+                        ElevatedButton.icon(
+                          onPressed: _toggleHost,
+                          icon: Icon(_isHosting ? Icons.stop : Icons.play_arrow),
+                          label: Text(_isHosting ? 'Stop Hosting' : 'Start Hosting'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: _isHosting ? Colors.red.shade700 : Colors.blue.shade700,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            minimumSize: const Size.fromHeight(50),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 32),
+                Card(
+                  elevation: 4,
+                  child: Padding(
+                    padding: const EdgeInsets.all(24.0),
+                    child: Column(
+                      children: [
+                        const Icon(Icons.settings_remote, size: 64, color: Colors.green),
+                        const SizedBox(height: 16),
+                        const Text('Connect to Partner', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 16),
+                        TextField(
+                          controller: _ipController,
+                          decoration: const InputDecoration(
+                            labelText: 'Partner IP Address',
+                            border: OutlineInputBorder(),
+                            prefixIcon: Icon(Icons.computer),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        ElevatedButton.icon(
+                          onPressed: _isHosting ? null : _connect,
+                          icon: const Icon(Icons.connect_without_contact),
+                          label: const Text('Connect'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.green.shade700,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            minimumSize: const Size.fromHeight(50),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class ViewerScreen extends StatefulWidget {
+  final String ip;
+  final int port;
+
+  const ViewerScreen({super.key, required this.ip, required this.port});
+
+  @override
+  State<ViewerScreen> createState() => _ViewerScreenState();
+}
+
+class _ViewerScreenState extends State<ViewerScreen> {
+  StreamSubscription? _streamSubscription;
+  Uint8List? _currentFrame;
+  bool _isConnected = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _startReceiving();
+  }
+
+  void _startReceiving() async {
+    try {
+      final stream = await startViewer(ip: widget.ip, port: widget.port);
+      _streamSubscription = stream.listen((frame) {
+        if (mounted) {
+          setState(() {
+            _currentFrame = frame;
+            _isConnected = true;
+          });
+        }
+      }, onError: (e) {
+        _handleDisconnect(e.toString());
+      }, onDone: () {
+        _handleDisconnect('Connection closed by host');
+      });
+    } catch (e) {
+      _handleDisconnect(e.toString());
+    }
+  }
+
+  void _handleDisconnect(String reason) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Disconnected: $reason')));
+      Navigator.pop(context);
+    }
+  }
+
+  @override
+  void dispose() {
+    _streamSubscription?.cancel();
+    stopViewer();
+    super.dispose();
+  }
+
+  void _sendMouseEvent(PointerEvent details, double maxWidth, double maxHeight) {
+    if (!_isConnected) return;
+    
+    sendInput(
+      ip: widget.ip, 
+      port: widget.port, 
+      cmd: InputCommand.mouseMove(
+        x: details.localPosition.dx, 
+        y: details.localPosition.dy, 
+        monitorWidth: maxWidth, 
+        monitorHeight: maxHeight
+      )
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        title: Text('Connected to ${widget.ip}'),
+        backgroundColor: Colors.black87,
+      ),
+      body: Center(
+        child: _currentFrame == null
+            ? const CircularProgressIndicator()
+            : LayoutBuilder(
+                builder: (context, constraints) {
+                  return Listener(
+                    onPointerHover: (details) => _sendMouseEvent(details, constraints.maxWidth, constraints.maxHeight),
+                    onPointerDown: (details) {
+                      sendInput(ip: widget.ip, port: widget.port, cmd: const InputCommand.mouseLeftClick());
+                    },
+                    child: Image.memory(
+                      _currentFrame!,
+                      fit: BoxFit.contain,
+                      gaplessPlayback: true,
+                    ),
+                  );
+                },
+              ),
       ),
     );
   }
