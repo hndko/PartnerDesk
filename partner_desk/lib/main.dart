@@ -236,6 +236,7 @@ class _ViewerScreenState extends State<ViewerScreen> {
                 builder: (context, constraints) {
                   return Listener(
                     onPointerHover: (details) => _sendMouseEvent(details, constraints.maxWidth, constraints.maxHeight),
+                    onPointerMove: (details) => _sendMouseEvent(details, constraints.maxWidth, constraints.maxHeight),
                     onPointerDown: (details) {
                       sendInput(ip: widget.ip, port: widget.port, cmd: const InputCommand.mouseLeftClick());
                     },

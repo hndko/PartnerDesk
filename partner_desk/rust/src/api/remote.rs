@@ -2,12 +2,12 @@ use flutter_rust_bridge::frb;
 use image::codecs::jpeg::JpegEncoder;
 use std::io::Cursor;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use tokio::net::{TcpListener, TcpStream, UdpSocket};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use xcap::Monitor;
 use serde::{Deserialize, Serialize};
-use enigo::{Enigo, Mouse, Keyboard, Coordinate, Button, Direction, Settings};
+use enigo::{Enigo, Mouse, Coordinate, Button, Direction, Settings};
 
 #[frb(init)]
 pub fn init_app() {
@@ -38,8 +38,8 @@ pub async fn start_host(port: u16) -> anyhow::Result<()> {
             if let Ok((len, _)) = input_socket_clone.recv_from(&mut buf).await {
                 if let Ok(cmd) = bincode::deserialize::<InputCommand>(&buf[..len]) {
                     match cmd {
-                        InputCommand::MouseMove { x, y, monitor_width, monitor_height } => {
-                            let _ = enigo.move_mouse((x as i32), (y as i32), Coordinate::Abs);
+                        InputCommand::MouseMove { x, y, monitor_width: _, monitor_height: _ } => {
+                            let _ = enigo.move_mouse(x as i32, y as i32, Coordinate::Abs);
                         }
                         InputCommand::MouseLeftClick => {
                             let _ = enigo.button(Button::Left, Direction::Click);
@@ -57,24 +57,38 @@ pub async fn start_host(port: u16) -> anyhow::Result<()> {
     if let Ok((mut socket, addr)) = listener.accept().await {
         println!("Client connected from {}", addr);
         
-        let monitors = Monitor::all()?;
-        let primary_monitor = monitors.into_iter().next().ok_or(anyhow::anyhow!("No monitor found"))?;
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<Vec<u8>>(10);
+        
+        std::thread::spawn(move || {
+            if let Ok(monitors) = Monitor::all() {
+                if let Some(primary_monitor) = monitors.into_iter().next() {
+                    // Screen capture loop
+                    loop {
+                        if !IS_SERVER_RUNNING.load(Ordering::Relaxed) {
+                            break;
+                        }
 
-        // Screen capture loop
-        loop {
-            if !IS_SERVER_RUNNING.load(Ordering::Relaxed) {
-                break;
+                        // Capture image
+                        if let Ok(image) = primary_monitor.capture_image() {
+                            // Encode to JPEG
+                            let mut buffer = Cursor::new(Vec::new());
+                            let mut encoder = JpegEncoder::new_with_quality(&mut buffer, 60); // 60 quality for speed
+                            if encoder.encode_image(&image).is_ok() {
+                                let jpeg_bytes = buffer.into_inner();
+                                if tx.blocking_send(jpeg_bytes).is_err() {
+                                    break;
+                                }
+                            }
+                        }
+
+                        // Sleep a bit to limit FPS (e.g., 10 FPS = 100ms)
+                        std::thread::sleep(std::time::Duration::from_millis(100));
+                    }
+                }
             }
+        });
 
-            // Capture image
-            let image = primary_monitor.capture_image()?;
-            
-            // Encode to JPEG
-            let mut buffer = Cursor::new(Vec::new());
-            let mut encoder = JpegEncoder::new_with_quality(&mut buffer, 60); // 60 quality for speed
-            encoder.encode_image(&image)?;
-            
-            let jpeg_bytes = buffer.into_inner();
+        while let Some(jpeg_bytes) = rx.recv().await {
             let size = jpeg_bytes.len() as u32;
 
             // Send size then bytes
@@ -84,9 +98,6 @@ pub async fn start_host(port: u16) -> anyhow::Result<()> {
             if socket.write_all(&jpeg_bytes).await.is_err() {
                 break;
             }
-
-            // Sleep a bit to limit FPS (e.g., 10 FPS = 100ms)
-            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
         }
     }
 
