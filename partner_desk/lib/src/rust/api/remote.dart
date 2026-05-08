@@ -41,4 +41,8 @@ sealed class InputCommand with _$InputCommand {
   }) = InputCommand_MouseMove;
   const factory InputCommand.mouseLeftClick() = InputCommand_MouseLeftClick;
   const factory InputCommand.mouseRightClick() = InputCommand_MouseRightClick;
+  const factory InputCommand.keyboardType({required String text}) =
+      InputCommand_KeyboardType;
+  const factory InputCommand.keyboardSpecial({required String keyName}) =
+      InputCommand_KeyboardSpecial;
 }

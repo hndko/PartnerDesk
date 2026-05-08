@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:partner_desk/src/rust/api/remote.dart';
 import 'package:partner_desk/src/rust/frb_generated.dart';
 
@@ -318,7 +319,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                     color: Colors.white.withOpacity(0.4),
                     tooltip: 'Salin IP',
                     onPressed: () {
-                      // Copy IP to clipboard
+                      Clipboard.setData(ClipboardData(text: _localIp));
+                      _showSnack('IP Address disalin!');
                     },
                   ),
                 ],
@@ -423,15 +425,65 @@ class _ViewerScreenState extends State<ViewerScreen> {
   int _frameCount = 0;
   DateTime? _sessionStart;
 
+  // Keyboard support
+  final FocusNode _keyboardFocusNode = FocusNode();
+  final TextEditingController _hiddenTextController = TextEditingController();
+  bool _showKeyboard = false;
+  bool _showSpecialKeys = false;
+
   @override
   void initState() {
     super.initState();
     _sessionStart = DateTime.now();
     _startReceiving();
+
+    // Listen for text changes to send keystrokes
+    _hiddenTextController.addListener(_onTextChanged);
+  }
+
+  String _previousText = '';
+
+  void _onTextChanged() {
+    final current = _hiddenTextController.text;
+    if (current.length > _previousText.length) {
+      // New character(s) typed
+      final newChars = current.substring(_previousText.length);
+      sendInput(
+        ip: widget.ip,
+        port: widget.port,
+        cmd: InputCommand.keyboardType(text: newChars),
+      );
+    } else if (current.length < _previousText.length) {
+      // Character deleted (backspace)
+      sendInput(
+        ip: widget.ip,
+        port: widget.port,
+        cmd: const InputCommand.keyboardSpecial(keyName: 'backspace'),
+      );
+    }
+    _previousText = current;
+  }
+
+  void _sendSpecialKey(String keyName) {
+    sendInput(
+      ip: widget.ip,
+      port: widget.port,
+      cmd: InputCommand.keyboardSpecial(keyName: keyName),
+    );
+  }
+
+  void _toggleKeyboard() {
+    setState(() {
+      _showKeyboard = !_showKeyboard;
+    });
+    if (_showKeyboard) {
+      _keyboardFocusNode.requestFocus();
+    } else {
+      _keyboardFocusNode.unfocus();
+    }
   }
 
   void _startReceiving() async {
-    // Start a 10-second timeout
     _connectionTimeoutTimer = Timer(const Duration(seconds: 10), () {
       if (!_isConnected && mounted) {
         _streamSubscription?.cancel();
@@ -444,7 +496,7 @@ class _ViewerScreenState extends State<ViewerScreen> {
       final stream = await startViewer(ip: widget.ip, port: widget.port);
       _streamSubscription = stream.listen((frame) {
         if (mounted) {
-          _connectionTimeoutTimer?.cancel(); // Got data, cancel timeout
+          _connectionTimeoutTimer?.cancel();
           setState(() {
             _currentFrame = frame;
             _isConnected = true;
@@ -487,20 +539,20 @@ class _ViewerScreenState extends State<ViewerScreen> {
         actions: [
           TextButton.icon(
             onPressed: () {
-              Navigator.pop(context); // close dialog
+              Navigator.pop(context);
               setState(() {
                 _isConnecting = true;
                 _isConnected = false;
               });
-              _startReceiving(); // retry
+              _startReceiving();
             },
             icon: const Icon(Icons.refresh_rounded),
             label: const Text('Coba Lagi'),
           ),
           FilledButton.icon(
             onPressed: () {
-              Navigator.pop(context); // close dialog
-              Navigator.pop(context); // go back home
+              Navigator.pop(context);
+              Navigator.pop(context);
             },
             icon: const Icon(Icons.arrow_back_rounded),
             label: const Text('Kembali'),
@@ -569,8 +621,8 @@ class _ViewerScreenState extends State<ViewerScreen> {
         actions: [
           FilledButton.icon(
             onPressed: () {
-              Navigator.pop(context); // close dialog
-              Navigator.pop(context); // go back home
+              Navigator.pop(context);
+              Navigator.pop(context);
             },
             icon: const Icon(Icons.home_rounded),
             label: const Text('Kembali ke Home'),
@@ -599,6 +651,9 @@ class _ViewerScreenState extends State<ViewerScreen> {
   void dispose() {
     _connectionTimeoutTimer?.cancel();
     _streamSubscription?.cancel();
+    _hiddenTextController.removeListener(_onTextChanged);
+    _hiddenTextController.dispose();
+    _keyboardFocusNode.dispose();
     stopViewer();
     super.dispose();
   }
@@ -651,46 +706,172 @@ class _ViewerScreenState extends State<ViewerScreen> {
           ],
         ),
         centerTitle: true,
-      ),
-      body: Center(
-        child: _isConnecting && _currentFrame == null
-            ? Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const CircularProgressIndicator(color: Color(0xFF6C63FF)),
-                  const SizedBox(height: 20),
-                  Text(
-                    'Menghubungkan ke ${widget.ip}...',
-                    style: TextStyle(color: Colors.white.withOpacity(0.5)),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Menunggu respons host (timeout 10 detik)',
-                    style: TextStyle(fontSize: 12, color: Colors.white.withOpacity(0.3)),
-                  ),
-                ],
-              )
-            : LayoutBuilder(
-                builder: (context, constraints) {
-                  return Listener(
-                    onPointerHover: (details) =>
-                        _sendMouseEvent(details, constraints.maxWidth, constraints.maxHeight),
-                    onPointerMove: (details) =>
-                        _sendMouseEvent(details, constraints.maxWidth, constraints.maxHeight),
-                    onPointerDown: (details) {
-                      sendInput(
-                          ip: widget.ip,
-                          port: widget.port,
-                          cmd: const InputCommand.mouseLeftClick());
-                    },
-                    child: Image.memory(
-                      _currentFrame!,
-                      fit: BoxFit.contain,
-                      gaplessPlayback: true,
-                    ),
-                  );
-                },
+        actions: [
+          // Right-click button
+          if (_isConnected)
+            IconButton(
+              icon: const Icon(Icons.mouse_rounded, size: 20),
+              tooltip: 'Right Click',
+              onPressed: () {
+                sendInput(
+                  ip: widget.ip,
+                  port: widget.port,
+                  cmd: const InputCommand.mouseRightClick(),
+                );
+              },
+            ),
+          // Special keys toggle
+          if (_isConnected)
+            IconButton(
+              icon: Icon(
+                Icons.keyboard_command_key_rounded,
+                size: 20,
+                color: _showSpecialKeys ? const Color(0xFF6C63FF) : null,
               ),
+              tooltip: 'Special Keys',
+              onPressed: () => setState(() => _showSpecialKeys = !_showSpecialKeys),
+            ),
+        ],
+      ),
+      // Hidden text field to capture keyboard input
+      body: Stack(
+        children: [
+          // Main content
+          Center(
+            child: _isConnecting && _currentFrame == null
+                ? Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const CircularProgressIndicator(color: Color(0xFF6C63FF)),
+                      const SizedBox(height: 20),
+                      Text(
+                        'Menghubungkan ke ${widget.ip}...',
+                        style: TextStyle(color: Colors.white.withOpacity(0.5)),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Menunggu respons host (timeout 10 detik)',
+                        style: TextStyle(fontSize: 12, color: Colors.white.withOpacity(0.3)),
+                      ),
+                    ],
+                  )
+                : LayoutBuilder(
+                    builder: (context, constraints) {
+                      return Listener(
+                        onPointerHover: (details) =>
+                            _sendMouseEvent(details, constraints.maxWidth, constraints.maxHeight),
+                        onPointerMove: (details) =>
+                            _sendMouseEvent(details, constraints.maxWidth, constraints.maxHeight),
+                        onPointerDown: (details) {
+                          sendInput(
+                              ip: widget.ip,
+                              port: widget.port,
+                              cmd: const InputCommand.mouseLeftClick());
+                        },
+                        child: Image.memory(
+                          _currentFrame!,
+                          fit: BoxFit.contain,
+                          gaplessPlayback: true,
+                        ),
+                      );
+                    },
+                  ),
+          ),
+
+          // Hidden text field (invisible, for capturing keyboard input)
+          if (_showKeyboard)
+            Positioned(
+              bottom: -100, // Off-screen, just to capture input
+              left: 0,
+              right: 0,
+              child: TextField(
+                controller: _hiddenTextController,
+                focusNode: _keyboardFocusNode,
+                autofocus: true,
+                decoration: const InputDecoration(border: InputBorder.none),
+                style: const TextStyle(color: Colors.transparent, height: 0),
+              ),
+            ),
+
+          // Special keys toolbar
+          if (_showSpecialKeys && _isConnected)
+            Positioned(
+              bottom: _showKeyboard ? 280 : 80,
+              left: 0,
+              right: 0,
+              child: Container(
+                margin: const EdgeInsets.symmetric(horizontal: 12),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1E1E2E).withOpacity(0.95),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.white.withOpacity(0.1)),
+                ),
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      _specialKeyBtn('Esc', 'escape'),
+                      _specialKeyBtn('Tab', 'tab'),
+                      _specialKeyBtn('⏎', 'enter'),
+                      _specialKeyBtn('⌫', 'backspace'),
+                      _specialKeyBtn('Del', 'delete'),
+                      _specialKeyBtn('Space', 'space'),
+                      const SizedBox(width: 8),
+                      Container(width: 1, height: 28, color: Colors.white24),
+                      const SizedBox(width: 8),
+                      _specialKeyBtn('←', 'left'),
+                      _specialKeyBtn('↑', 'up'),
+                      _specialKeyBtn('↓', 'down'),
+                      _specialKeyBtn('→', 'right'),
+                      const SizedBox(width: 8),
+                      Container(width: 1, height: 28, color: Colors.white24),
+                      const SizedBox(width: 8),
+                      _specialKeyBtn('Home', 'home'),
+                      _specialKeyBtn('End', 'end'),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+
+      // Floating keyboard toggle button
+      floatingActionButton: _isConnected
+          ? FloatingActionButton(
+              onPressed: _toggleKeyboard,
+              backgroundColor: _showKeyboard ? const Color(0xFF6C63FF) : const Color(0xFF2A2A3E),
+              child: Icon(
+                _showKeyboard ? Icons.keyboard_hide_rounded : Icons.keyboard_rounded,
+                color: Colors.white,
+              ),
+            )
+          : null,
+    );
+  }
+
+  Widget _specialKeyBtn(String label, String keyName) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 3),
+      child: Material(
+        color: const Color(0xFF2A2A3E),
+        borderRadius: BorderRadius.circular(10),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(10),
+          onTap: () => _sendSpecialKey(keyName),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            child: Text(
+              label,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: Colors.white70,
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

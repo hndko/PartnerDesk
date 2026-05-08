@@ -160,6 +160,10 @@ let mut var_monitorHeight = <f64>::sse_decode(deserializer);
 return crate::api::remote::InputCommand::MouseMove{x: var_x, y: var_y, monitor_width: var_monitorWidth, monitor_height: var_monitorHeight}; }
 1 => { return crate::api::remote::InputCommand::MouseLeftClick; }
 2 => { return crate::api::remote::InputCommand::MouseRightClick; }
+3 => { let mut var_text = <String>::sse_decode(deserializer);
+return crate::api::remote::InputCommand::KeyboardType{text: var_text}; }
+4 => { let mut var_keyName = <String>::sse_decode(deserializer);
+return crate::api::remote::InputCommand::KeyboardSpecial{key_name: var_keyName}; }
  _ => { unimplemented!(""); }}}
                 }
                 
@@ -241,6 +245,10 @@ monitor_width.into_into_dart().into_dart(),
 monitor_height.into_into_dart().into_dart()].into_dart() }
 crate::api::remote::InputCommand::MouseLeftClick => { [1.into_dart()].into_dart() }
 crate::api::remote::InputCommand::MouseRightClick => { [2.into_dart()].into_dart() }
+crate::api::remote::InputCommand::KeyboardType{text} => { [3.into_dart(),
+text.into_into_dart().into_dart()].into_dart() }
+crate::api::remote::InputCommand::KeyboardSpecial{key_name} => { [4.into_dart(),
+key_name.into_into_dart().into_dart()].into_dart() }
  _ => { unimplemented!(""); }}
                 }
             }
@@ -280,6 +288,10 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::remote::InputCommand> for cra
  }
 crate::api::remote::InputCommand::MouseLeftClick => { <i32>::sse_encode(1, serializer);  }
 crate::api::remote::InputCommand::MouseRightClick => { <i32>::sse_encode(2, serializer);  }
+crate::api::remote::InputCommand::KeyboardType{text} => { <i32>::sse_encode(3, serializer); <String>::sse_encode(text, serializer);
+ }
+crate::api::remote::InputCommand::KeyboardSpecial{key_name} => { <i32>::sse_encode(4, serializer); <String>::sse_encode(key_name, serializer);
+ }
  _ => { unimplemented!(""); }}}
                 }
                 

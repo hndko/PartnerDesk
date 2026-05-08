@@ -7,7 +7,7 @@ use tokio::net::{TcpListener, TcpStream, UdpSocket};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use xcap::Monitor;
 use serde::{Deserialize, Serialize};
-use enigo::{Enigo, Mouse, Coordinate, Button, Direction, Settings};
+use enigo::{Enigo, Mouse, Keyboard, Coordinate, Button, Direction, Settings, Key};
 
 #[frb(init)]
 pub fn init_app() {
@@ -21,6 +21,8 @@ pub enum InputCommand {
     MouseMove { x: f64, y: f64, monitor_width: f64, monitor_height: f64 },
     MouseLeftClick,
     MouseRightClick,
+    KeyboardType { text: String },
+    KeyboardSpecial { key_name: String },
 }
 
 /// Start the host server that will capture screen and listen for connections.
@@ -46,6 +48,27 @@ pub async fn start_host(port: u16) -> anyhow::Result<()> {
                         }
                         InputCommand::MouseRightClick => {
                             let _ = enigo.button(Button::Right, Direction::Click);
+                        }
+                        InputCommand::KeyboardType { text } => {
+                            let _ = enigo.text(&text);
+                        }
+                        InputCommand::KeyboardSpecial { key_name } => {
+                            let key = match key_name.as_str() {
+                                "enter" => Key::Return,
+                                "backspace" => Key::Backspace,
+                                "tab" => Key::Tab,
+                                "escape" => Key::Escape,
+                                "delete" => Key::Delete,
+                                "up" => Key::UpArrow,
+                                "down" => Key::DownArrow,
+                                "left" => Key::LeftArrow,
+                                "right" => Key::RightArrow,
+                                "home" => Key::Home,
+                                "end" => Key::End,
+                                "space" => Key::Space,
+                                _ => Key::Return, // fallback
+                            };
+                            let _ = enigo.key(key, Direction::Click);
                         }
                     }
                 }

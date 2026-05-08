@@ -393,6 +393,10 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         return InputCommand_MouseLeftClick();
       case 2:
         return InputCommand_MouseRightClick();
+      case 3:
+        return InputCommand_KeyboardType(text: dco_decode_String(raw[1]));
+      case 4:
+        return InputCommand_KeyboardSpecial(keyName: dco_decode_String(raw[1]));
       default:
         throw Exception("unreachable");
     }
@@ -479,6 +483,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         return InputCommand_MouseLeftClick();
       case 2:
         return InputCommand_MouseRightClick();
+      case 3:
+        var var_text = sse_decode_String(deserializer);
+        return InputCommand_KeyboardType(text: var_text);
+      case 4:
+        var var_keyName = sse_decode_String(deserializer);
+        return InputCommand_KeyboardSpecial(keyName: var_keyName);
       default:
         throw UnimplementedError('');
     }
@@ -586,6 +596,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_i_32(1, serializer);
       case InputCommand_MouseRightClick():
         sse_encode_i_32(2, serializer);
+      case InputCommand_KeyboardType(text: final text):
+        sse_encode_i_32(3, serializer);
+        sse_encode_String(text, serializer);
+      case InputCommand_KeyboardSpecial(keyName: final keyName):
+        sse_encode_i_32(4, serializer);
+        sse_encode_String(keyName, serializer);
     }
   }
 
