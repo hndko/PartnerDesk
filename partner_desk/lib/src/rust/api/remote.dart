@@ -8,31 +8,37 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 part 'remote.freezed.dart';
 
-            // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `fmt`
 
+/// Start the host server that will capture screen and listen for connections.
+Future<void> startHost({required int port}) =>
+    RustLib.instance.api.crateApiRemoteStartHost(port: port);
 
-            /// Start the host server that will capture screen and listen for connections.
-Future<void>  startHost({required int port }) => RustLib.instance.api.crateApiRemoteStartHost(port: port);
-
-Future<void>  stopHost() => RustLib.instance.api.crateApiRemoteStopHost();
+Future<void> stopHost() => RustLib.instance.api.crateApiRemoteStopHost();
 
 /// Connect to a host and receive video frames, sending them to Flutter via StreamSink
-Stream<Uint8List>  startViewer({required String ip , required int port }) => RustLib.instance.api.crateApiRemoteStartViewer(ip: ip, port: port);
+Stream<Uint8List> startViewer({required String ip, required int port}) =>
+    RustLib.instance.api.crateApiRemoteStartViewer(ip: ip, port: port);
 
-Future<void>  stopViewer() => RustLib.instance.api.crateApiRemoteStopViewer();
+Future<void> stopViewer() => RustLib.instance.api.crateApiRemoteStopViewer();
 
-Future<void>  sendInput({required String ip , required int port , required InputCommand cmd }) => RustLib.instance.api.crateApiRemoteSendInput(ip: ip, port: port, cmd: cmd);
+Future<void> sendInput({
+  required String ip,
+  required int port,
+  required InputCommand cmd,
+}) =>
+    RustLib.instance.api.crateApiRemoteSendInput(ip: ip, port: port, cmd: cmd);
 
-            @freezed
-                sealed class InputCommand with _$InputCommand  {
-                    const InputCommand._();
+@freezed
+sealed class InputCommand with _$InputCommand {
+  const InputCommand._();
 
-                     const factory InputCommand.mouseMove({   required double x ,  required double y ,  required double monitorWidth ,  required double monitorHeight , }) = InputCommand_MouseMove;
- const factory InputCommand.mouseLeftClick() = InputCommand_MouseLeftClick;
- const factory InputCommand.mouseRightClick() = InputCommand_MouseRightClick;
-
-                    
-
-                    
-                }
-            
+  const factory InputCommand.mouseMove({
+    required double x,
+    required double y,
+    required double monitorWidth,
+    required double monitorHeight,
+  }) = InputCommand_MouseMove;
+  const factory InputCommand.mouseLeftClick() = InputCommand_MouseLeftClick;
+  const factory InputCommand.mouseRightClick() = InputCommand_MouseRightClick;
+}
