@@ -3,7 +3,7 @@ use image::codecs::jpeg::JpegEncoder;
 use std::io::Cursor;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use tokio::net::{TcpListener, TcpStream, UdpSocket};
+use tokio::net::{TcpStream, UdpSocket};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use xcap::Monitor;
 use serde::{Deserialize, Serialize};
@@ -31,8 +31,16 @@ pub enum InputCommand {
 /// Start the host server that will capture screen and listen for connections.
 /// Now loops to accept multiple connections (reconnects).
 pub async fn start_host(port: u16) -> anyhow::Result<()> {
-    let listener = TcpListener::bind(format!("0.0.0.0:{}", port)).await?;
-    let input_socket = Arc::new(UdpSocket::bind(format!("0.0.0.0:{}", port + 1)).await?);
+    // Use SO_REUSEADDR to allow quick restart
+    let tcp_socket = tokio::net::TcpSocket::new_v4()?;
+    tcp_socket.set_reuseaddr(true)?;
+    tcp_socket.bind(format!("0.0.0.0:{}", port).parse()?)?;
+    let listener = tcp_socket.listen(1024)?;
+
+    let udp_std = std::net::UdpSocket::bind(format!("0.0.0.0:{}", port + 1))?;
+    udp_std.set_nonblocking(true)?;
+    let input_socket = Arc::new(UdpSocket::from_std(udp_std)?);
+
     IS_SERVER_RUNNING.store(true, Ordering::Relaxed);
 
     // Spawn input receiver task
