@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:partner_desk/src/rust/api/remote.dart';
@@ -38,6 +39,38 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final TextEditingController _ipController = TextEditingController(text: '127.0.0.1');
   bool _isHosting = false;
+  String _localIp = "Mencari IP...";
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchLocalIp();
+  }
+
+  Future<void> _fetchLocalIp() async {
+    try {
+      String ip = 'Tidak ditemukan';
+      for (var interface in await NetworkInterface.list()) {
+        for (var addr in interface.addresses) {
+          if (addr.type == InternetAddressType.IPv4 && !addr.isLoopback) {
+            ip = addr.address;
+            break;
+          }
+        }
+      }
+      if (mounted) {
+        setState(() {
+          _localIp = ip;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _localIp = 'Gagal mengambil IP';
+        });
+      }
+    }
+  }
 
   void _toggleHost() async {
     if (_isHosting) {
@@ -91,6 +124,25 @@ class _HomeScreenState extends State<HomeScreen> {
                         const Icon(Icons.screen_share, size: 64, color: Colors.blue),
                         const SizedBox(height: 16),
                         const Text('Share Your Screen', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.blue.withOpacity(0.3)),
+                          ),
+                          child: Column(
+                            children: [
+                              const Text('IP Address Anda:', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                              const SizedBox(height: 4),
+                              SelectableText(
+                                _localIp,
+                                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.blueAccent),
+                              ),
+                            ],
+                          ),
+                        ),
                         const SizedBox(height: 16),
                         ElevatedButton.icon(
                           onPressed: _toggleHost,
