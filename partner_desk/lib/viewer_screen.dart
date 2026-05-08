@@ -187,10 +187,24 @@ class _ViewerScreenState extends State<ViewerScreen> {
               const SizedBox(height: 8),
               Text('Menunggu respons host (timeout 10 detik)', style: TextStyle(fontSize: 12, color: Colors.white.withOpacity(0.3))),
             ])
-          : LayoutBuilder(builder: (ctx, c) => Listener(
-              onPointerHover: (d) => _mouseEv(d, c.maxWidth, c.maxHeight),
-              onPointerMove: (d) => _mouseEv(d, c.maxWidth, c.maxHeight),
-              onPointerDown: (_) => sendInput(ip: widget.ip, port: widget.port, cmd: const InputCommand.mouseLeftClick()),
+          : LayoutBuilder(builder: (ctx, c) => GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTapDown: (details) {
+                // Move cursor to tap position first, then click
+                sendInput(ip: widget.ip, port: widget.port, cmd: InputCommand.mouseMove(
+                  x: details.localPosition.dx, y: details.localPosition.dy, monitorWidth: c.maxWidth, monitorHeight: c.maxHeight));
+                sendInput(ip: widget.ip, port: widget.port, cmd: const InputCommand.mouseLeftClick());
+              },
+              onLongPressStart: (details) {
+                sendInput(ip: widget.ip, port: widget.port, cmd: InputCommand.mouseMove(
+                  x: details.localPosition.dx, y: details.localPosition.dy, monitorWidth: c.maxWidth, monitorHeight: c.maxHeight));
+                sendInput(ip: widget.ip, port: widget.port, cmd: const InputCommand.mouseRightClick());
+              },
+              onPanUpdate: (details) {
+                if (!_connected) return;
+                sendInput(ip: widget.ip, port: widget.port, cmd: InputCommand.mouseMove(
+                  x: details.localPosition.dx, y: details.localPosition.dy, monitorWidth: c.maxWidth, monitorHeight: c.maxHeight));
+              },
               child: Image.memory(_frame!, fit: BoxFit.contain, gaplessPlayback: true),
             )),
         ),

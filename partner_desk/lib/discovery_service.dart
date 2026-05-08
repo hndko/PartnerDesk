@@ -29,13 +29,21 @@ class DiscoveryService {
   static Future<String> getLocalIp() async {
     if (_localIp != null) return _localIp!;
     try {
+      final allIps = <String>[];
       for (var iface in await NetworkInterface.list()) {
         for (var addr in iface.addresses) {
           if (addr.type == InternetAddressType.IPv4 && !addr.isLoopback) {
-            _localIp = addr.address;
-            return _localIp!;
+            allIps.add(addr.address);
           }
         }
+      }
+      if (allIps.isNotEmpty) {
+        // Prefer 192.168.x.x (WiFi) over 10.x.x.x (Ethernet/VPN)
+        _localIp = allIps.firstWhere(
+          (ip) => ip.startsWith('192.168.'),
+          orElse: () => allIps.first,
+        );
+        return _localIp!;
       }
     } catch (_) {}
     return 'Tidak ditemukan';
