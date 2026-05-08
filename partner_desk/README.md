@@ -1,17 +1,16 @@
-# partner_desk
+# PartnerDesk
 
-A new Flutter project.
+PartnerDesk is a high-performance, low-latency cross-platform remote desktop application built with Flutter and Rust. 
 
-## Getting Started
+**Short Description for GitHub:**
+> 🚀 PartnerDesk is a blazing-fast, cross-platform remote desktop application using a Rust core (tokio, xcap, enigo) and a Flutter UI for seamless screen sharing and remote control. 
 
-This project is a starting point for a Flutter application.
+## Features
+- **High-Performance Core**: Written in Rust for maximum speed, using `tokio` for asynchronous networking.
+- **Cross-Platform UI**: Beautiful and responsive UI powered by Flutter.
+- **Screen Sharing**: Fast screen capture via `xcap` and JPEG compression.
+- **Remote Control**: Absolute mouse tracking and click injection using `enigo`.
+- **Low Latency**: TCP and UDP multiplexed streaming for minimal delay over LAN.
 
-A few resources to get you started if this is your first Flutter project:
-
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+## Documentation
+- [Running & Build Guide](docs/running_guide.md)

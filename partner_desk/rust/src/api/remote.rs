@@ -100,7 +100,7 @@ pub fn stop_host() {
 static IS_VIEWER_RUNNING: AtomicBool = AtomicBool::new(false);
 
 /// Connect to a host and receive video frames, sending them to Flutter via StreamSink
-pub async fn start_viewer(ip: String, port: u16, sink: flutter_rust_bridge::StreamSink<Vec<u8>>) -> anyhow::Result<()> {
+pub async fn start_viewer(ip: String, port: u16, sink: crate::frb_generated::StreamSink<Vec<u8>>) -> anyhow::Result<()> {
     let mut stream = TcpStream::connect(format!("{}:{}", ip, port)).await?;
     IS_VIEWER_RUNNING.store(true, Ordering::Relaxed);
 
