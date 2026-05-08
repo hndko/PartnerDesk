@@ -112,16 +112,24 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   }
 
   void _connectById() async {
-    final id = _idController.text.trim();
-    if (id.isEmpty) {
-      _showSnack('Masukkan Partner ID terlebih dahulu', isError: true);
+    final input = _idController.text.trim();
+    if (input.isEmpty) {
+      _showSnack('Masukkan Partner ID atau IP Address', isError: true);
       return;
     }
 
-    setState(() => _isResolving = true);
-    _showSnack('Mencari partner $id di jaringan...');
+    // If input looks like an IP address, connect directly
+    final isIp = RegExp(r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$').hasMatch(input);
+    if (isIp) {
+      Navigator.push(context, MaterialPageRoute(builder: (_) => ViewerScreen(ip: input, port: 9090)));
+      return;
+    }
 
-    final ip = await DiscoveryService.resolveId(id);
+    // Otherwise, try ID-based discovery
+    setState(() => _isResolving = true);
+    _showSnack('Mencari partner $input di jaringan...');
+
+    final ip = await DiscoveryService.resolveId(input);
 
     if (!mounted) return;
     setState(() => _isResolving = false);
@@ -129,7 +137,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     if (ip != null) {
       Navigator.push(context, MaterialPageRoute(builder: (_) => ViewerScreen(ip: ip, port: 9090)));
     } else {
-      _showSnack('Partner ID "$id" tidak ditemukan. Pastikan partner online dan satu jaringan.', isError: true);
+      _showSnack('Partner "$input" tidak ditemukan. Coba masukkan IP Address langsung (misal: 192.168.1.5)', isError: true);
     }
   }
 
@@ -316,9 +324,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             controller: _idController,
             style: const TextStyle(fontSize: 18, letterSpacing: 2, fontWeight: FontWeight.w600),
             decoration: const InputDecoration(
-              hintText: 'XXX-XXX-XXX',
-              hintStyle: TextStyle(color: Colors.grey, letterSpacing: 2),
-              labelText: 'Partner ID',
+              hintText: 'ID atau IP Address',
+              hintStyle: TextStyle(color: Colors.grey, letterSpacing: 1),
+              labelText: 'Partner ID / IP Address',
               prefixIcon: Icon(Icons.fingerprint_rounded, color: Color(0xFF4CAF50)),
             ),
           ),
