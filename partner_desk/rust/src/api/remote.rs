@@ -16,6 +16,9 @@ pub fn init_app() {
 
 static IS_SERVER_RUNNING: AtomicBool = AtomicBool::new(false);
 
+/// Max frame size: 10MB - prevents OOM from corrupt data
+const MAX_FRAME_SIZE: usize = 10 * 1024 * 1024;
+
 #[derive(Serialize, Deserialize, Debug)]
 pub enum InputCommand {
     MouseMove { x: f64, y: f64, monitor_width: f64, monitor_height: f64 },
@@ -26,6 +29,7 @@ pub enum InputCommand {
 }
 
 /// Start the host server that will capture screen and listen for connections.
+/// Now loops to accept multiple connections (reconnects).
 pub async fn start_host(port: u16) -> anyhow::Result<()> {
     let listener = TcpListener::bind(format!("0.0.0.0:{}", port)).await?;
     let input_socket = Arc::new(UdpSocket::bind(format!("0.0.0.0:{}", port + 1)).await?);
@@ -35,7 +39,7 @@ pub async fn start_host(port: u16) -> anyhow::Result<()> {
     let input_socket_clone = input_socket.clone();
     tokio::spawn(async move {
         let mut enigo = Enigo::new(&Settings::default()).unwrap();
-        let mut buf = [0; 1024];
+        let mut buf = [0; 4096];
         while IS_SERVER_RUNNING.load(Ordering::Relaxed) {
             if let Ok((len, _)) = input_socket_clone.recv_from(&mut buf).await {
                 if let Ok(cmd) = bincode::deserialize::<InputCommand>(&buf[..len]) {
@@ -66,7 +70,7 @@ pub async fn start_host(port: u16) -> anyhow::Result<()> {
                                 "home" => Key::Home,
                                 "end" => Key::End,
                                 "space" => Key::Space,
-                                _ => Key::Return, // fallback
+                                _ => Key::Return,
                             };
                             let _ = enigo.key(key, Direction::Click);
                         }
@@ -76,49 +80,57 @@ pub async fn start_host(port: u16) -> anyhow::Result<()> {
         }
     });
 
-    // Accept only one connection for simplicity in MVP
-    if let Ok((mut socket, addr)) = listener.accept().await {
-        println!("Client connected from {}", addr);
-        
-        let (tx, mut rx) = tokio::sync::mpsc::channel::<Vec<u8>>(10);
-        
-        std::thread::spawn(move || {
-            if let Ok(monitors) = Monitor::all() {
-                if let Some(primary_monitor) = monitors.into_iter().next() {
-                    // Screen capture loop
-                    loop {
-                        if !IS_SERVER_RUNNING.load(Ordering::Relaxed) {
-                            break;
-                        }
-
-                        // Capture image
-                        if let Ok(image) = primary_monitor.capture_image() {
-                            // Encode to JPEG
-                            let mut buffer = Cursor::new(Vec::new());
-                            let mut encoder = JpegEncoder::new_with_quality(&mut buffer, 60); // 60 quality for speed
-                            if encoder.encode_image(&image).is_ok() {
-                                let jpeg_bytes = buffer.into_inner();
-                                if tx.blocking_send(jpeg_bytes).is_err() {
+    // Loop to accept multiple connections (allows reconnect)
+    while IS_SERVER_RUNNING.load(Ordering::Relaxed) {
+        match listener.accept().await {
+            Ok((mut socket, addr)) => {
+                println!("Client connected from {}", addr);
+                
+                let (tx, mut rx) = tokio::sync::mpsc::channel::<Vec<u8>>(10);
+                
+                std::thread::spawn(move || {
+                    if let Ok(monitors) = Monitor::all() {
+                        if let Some(primary_monitor) = monitors.into_iter().next() {
+                            loop {
+                                if !IS_SERVER_RUNNING.load(Ordering::Relaxed) {
                                     break;
                                 }
+
+                                if let Ok(image) = primary_monitor.capture_image() {
+                                    let mut buffer = Cursor::new(Vec::new());
+                                    let mut encoder = JpegEncoder::new_with_quality(&mut buffer, 60);
+                                    if encoder.encode_image(&image).is_ok() {
+                                        let jpeg_bytes = buffer.into_inner();
+                                        if tx.blocking_send(jpeg_bytes).is_err() {
+                                            break; // Receiver dropped (client disconnected)
+                                        }
+                                    }
+                                }
+
+                                std::thread::sleep(std::time::Duration::from_millis(100));
                             }
                         }
+                    }
+                });
 
-                        // Sleep a bit to limit FPS (e.g., 10 FPS = 100ms)
-                        std::thread::sleep(std::time::Duration::from_millis(100));
+                // Forward frames to TCP
+                while let Some(jpeg_bytes) = rx.recv().await {
+                    if !IS_SERVER_RUNNING.load(Ordering::Relaxed) {
+                        break;
+                    }
+                    let size = jpeg_bytes.len() as u32;
+
+                    if socket.write_all(&size.to_be_bytes()).await.is_err() {
+                        break;
+                    }
+                    if socket.write_all(&jpeg_bytes).await.is_err() {
+                        break;
                     }
                 }
+                println!("Client {} disconnected, waiting for new connection...", addr);
             }
-        });
-
-        while let Some(jpeg_bytes) = rx.recv().await {
-            let size = jpeg_bytes.len() as u32;
-
-            // Send size then bytes
-            if socket.write_all(&size.to_be_bytes()).await.is_err() {
-                break;
-            }
-            if socket.write_all(&jpeg_bytes).await.is_err() {
+            Err(e) => {
+                eprintln!("Accept error: {}", e);
                 break;
             }
         }
@@ -149,12 +161,17 @@ pub async fn start_viewer(ip: String, port: u16, sink: crate::frb_generated::Str
         }
         let size = u32::from_be_bytes(size_buf) as usize;
 
+        // Validate frame size to prevent OOM
+        if size > MAX_FRAME_SIZE {
+            eprintln!("Frame size {} exceeds max {}, skipping", size, MAX_FRAME_SIZE);
+            break;
+        }
+
         let mut img_buf = vec![0u8; size];
         if stream.read_exact(&mut img_buf).await.is_err() {
             break;
         }
 
-        // Send frame to Flutter
         let _ = sink.add(img_buf);
     }
     
@@ -165,8 +182,19 @@ pub fn stop_viewer() {
     IS_VIEWER_RUNNING.store(false, Ordering::Relaxed);
 }
 
+/// Reusable UDP socket for sending input (lazy-initialized)
+static INPUT_SOCKET: tokio::sync::OnceCell<UdpSocket> = tokio::sync::OnceCell::const_new();
+
+async fn get_input_socket() -> &'static UdpSocket {
+    INPUT_SOCKET
+        .get_or_init(|| async {
+            UdpSocket::bind("0.0.0.0:0").await.expect("Failed to bind input socket")
+        })
+        .await
+}
+
 pub async fn send_input(ip: String, port: u16, cmd: InputCommand) -> anyhow::Result<()> {
-    let socket = UdpSocket::bind("0.0.0.0:0").await?;
+    let socket = get_input_socket().await;
     let data = bincode::serialize(&cmd)?;
     socket.send_to(&data, format!("{}:{}", ip, port + 1)).await?;
     Ok(())
