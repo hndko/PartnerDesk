@@ -37,9 +37,11 @@ pub async fn start_host(port: u16) -> anyhow::Result<()> {
     tcp_socket.bind(format!("0.0.0.0:{}", port).parse()?)?;
     let listener = tcp_socket.listen(1024)?;
 
-    let udp_std = std::net::UdpSocket::bind(format!("0.0.0.0:{}", port + 1))?;
-    udp_std.set_nonblocking(true)?;
-    let input_socket = Arc::new(UdpSocket::from_std(udp_std)?);
+    let udp_raw = socket2::Socket::new(socket2::Domain::IPV4, socket2::Type::DGRAM, Some(socket2::Protocol::UDP))?;
+    udp_raw.set_reuse_address(true)?;
+    udp_raw.set_nonblocking(true)?;
+    udp_raw.bind(&format!("0.0.0.0:{}", port + 1).parse::<std::net::SocketAddr>()?.into())?;
+    let input_socket = Arc::new(UdpSocket::from_std(std::net::UdpSocket::from(udp_raw))?);
 
     IS_SERVER_RUNNING.store(true, Ordering::Relaxed);
 
